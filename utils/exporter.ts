@@ -1,6 +1,9 @@
 import { Transaction } from '../types';
 import { format } from 'date-fns';
 
+/**
+ * Trigger a file download in the browser.
+ */
 export const downloadFile = (filename: string, content: string, mimeType: string) => {
   const blob = new Blob(['\ufeff', content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -13,7 +16,8 @@ export const downloadFile = (filename: string, content: string, mimeType: string
   URL.revokeObjectURL(url);
 };
 
-// --- Budget Exporters (Unchanged) ---
+// --- Budget Exporters ---
+
 const generateChartHTML = (income: number, expense: number, currency: string) => {
   const total = Math.max(income + expense, 1);
   const incPct = Math.round((income / total) * 100);
@@ -106,12 +110,70 @@ export const generateBudgetWord = (transactions: Transaction[], currencySymbol: 
   `;
 };
 
-// --- Admin Exporters (UPDATED FOR WORD COMPATIBILITY) ---
+export const generateBudgetPPT = (transactions: Transaction[], currencySymbol: string, includeCharts: boolean) => {
+  const income = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0);
+  const expense = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + Number(t.amount), 0);
+  const balance = income - expense;
+
+  const chartHtml = includeCharts ? `
+    <div style="margin-top: 30px; width: 80%;">
+      <p style="text-align: left; margin: 5px;">Income</p>
+      <div style="width: 100%; background: #eee; height: 30px;">
+        <div style="width: ${Math.round((income / (income + expense || 1)) * 100)}%; background: #22c55e; height: 30px;"></div>
+      </div>
+      <p style="text-align: left; margin: 5px; margin-top: 15px;">Expenses</p>
+      <div style="width: 100%; background: #eee; height: 30px;">
+        <div style="width: ${Math.round((expense / (income + expense || 1)) * 100)}%; background: #ef4444; height: 30px;"></div>
+      </div>
+    </div>
+  ` : '';
+
+  return `
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' 
+          xmlns:w='urn:schemas-microsoft-com:office:word' 
+          xmlns:v='urn:schemas-microsoft-com:vml' 
+          xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+      <meta charset="utf-8">
+      <title>Budget Summary</title>
+      <style>
+        .slide { 
+          border: 1px solid #ccc; padding: 50px; margin: 20px auto; width: 960px; height: 540px; 
+          font-family: Arial, sans-serif; background: white; page-break-after: always;
+          display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+        }
+        h1 { color: #0284c7; font-size: 48px; margin-bottom: 10px; }
+        h2 { color: #334155; font-size: 32px; }
+        .stat { font-size: 28px; margin: 15px 0; }
+        .positive { color: green; font-weight: bold; }
+        .negative { color: red; font-weight: bold; }
+        .balance { font-size: 36px; color: #0f172a; margin-top: 30px; border-top: 3px solid #0284c7; padding-top: 20px; width: 60%; }
+      </style>
+    </head>
+    <body>
+      <div class="slide">
+        <h1>Financial Snapshot</h1>
+        <h2>Kaizen Life Report</h2>
+        <p>Date: ${new Date().toLocaleDateString()}</p>
+        <p>Total Transactions: ${transactions.length}</p>
+      </div>
+      <div class="slide">
+        <h1>Overview</h1>
+        <div class="stat">Total Income: <span class="positive">${currencySymbol}${income.toLocaleString()}</span></div>
+        <div class="stat">Total Expenses: <span class="negative">${currencySymbol}${expense.toLocaleString()}</span></div>
+        ${chartHtml}
+        <div class="balance">Net Balance: <strong>${currencySymbol}${balance.toLocaleString()}</strong></div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+// --- Admin Exporters ---
 
 export const generateAdminReportWord = (title: string, data: any[], type: 'users' | 'feedback') => {
   const date = new Date().toLocaleDateString();
 
-  // Basic styles for layout
   const styles = `
     <style>
       body { font-family: 'Arial', sans-serif; color: #333; }
@@ -137,9 +199,8 @@ export const generateAdminReportWord = (title: string, data: any[], type: 'users
       </tr>
     `;
     tableRows = data.map(u => {
-      // Inline styles for Role to ensure visibility in Word
       const isAdmin = u.isAdmin === true;
-      const roleColor = isAdmin ? '#4f46e5' : '#64748b'; // Indigo for Admin, Slate for User
+      const roleColor = isAdmin ? '#4f46e5' : '#64748b'; 
       const roleText = isAdmin ? 'ADMIN' : 'USER';
       
       return `
@@ -165,11 +226,10 @@ export const generateAdminReportWord = (title: string, data: any[], type: 'users
       </tr>
     `;
     tableRows = data.map(f => {
-      // Inline styles for Feedback Type
       const fType = f.type ? f.type.toLowerCase() : 'unknown';
-      let typeColor = '#059669'; // Default Green (Feature)
-      if (fType === 'bug') typeColor = '#e11d48'; // Red
-      if (fType === 'suggestion') typeColor = '#d97706'; // Amber
+      let typeColor = '#059669'; 
+      if (fType === 'bug') typeColor = '#e11d48'; 
+      if (fType === 'suggestion') typeColor = '#d97706'; 
 
       return `
       <tr>

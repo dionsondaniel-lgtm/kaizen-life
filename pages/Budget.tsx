@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  Plus, FileText, Presentation, TrendingUp, TrendingDown, Wallet, 
+  Plus, FileText, Presentation, TrendingUp, BarChart2, 
   Pencil, Trash2, BatteryWarning, BatteryCharging,
-  PieChart as PieIcon, BarChart2, AlertTriangle, Activity, BarChart as BarIcon
+  PieChart as PieIcon, BarChart as BarIcon, AlertTriangle, Activity
 } from 'lucide-react';
 import { 
   AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -97,8 +97,15 @@ const Budget: React.FC<BudgetProps> = ({ transactions, setTransactions, currency
     }
   };
 
-  const income = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + Number(t.amount), 0);
-  const expense = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + Number(t.amount), 0);
+  // Explicit number typing for calculations
+  const income = transactions
+    .filter(t => t.type === 'income')
+    .reduce((acc: number, t) => acc + Number(t.amount), 0);
+    
+  const expense = transactions
+    .filter(t => t.type === 'expense')
+    .reduce((acc: number, t) => acc + Number(t.amount), 0);
+    
   const balance = income - expense;
 
   // Analysis Logic
@@ -127,12 +134,13 @@ const Budget: React.FC<BudgetProps> = ({ transactions, setTransactions, currency
     batteryMessage = 'Great job! High savings rate.';
   }
 
-  // --- Chart Data Preparation (Aggregated by Date) ---
+  // --- Chart Data Preparation ---
   const chartData = useMemo(() => {
     const grouped = transactions.reduce((acc, t) => {
       const dateKey = format(new Date(t.date), 'yyyy-MM-dd');
       if (!acc[dateKey]) acc[dateKey] = 0;
-      acc[dateKey] += t.type === 'income' ? Number(t.amount) : -Number(t.amount);
+      const val = Number(t.amount);
+      acc[dateKey] += t.type === 'income' ? val : -val;
       return acc;
     }, {} as Record<string, number>);
 
@@ -146,14 +154,20 @@ const Budget: React.FC<BudgetProps> = ({ transactions, setTransactions, currency
       .sort((a,b) => a.date.localeCompare(b.date));
   }, [transactions]);
 
-  // Calculate dynamic width for scrolling: at least 100% or 60px per data point
-  const chartWidth = Math.max(100, chartData.length * 8); 
+  const chartWidth = Math.max(100, (chartData.length || 0) * 8); 
 
+  // --- FIX: Explicitly typed accumulator and explicit Number() casting ---
   const categoryData = Object.entries(
     transactions
       .filter(t => t.type === 'expense')
-      .reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + Number(t.amount); return acc; }, {} as Record<string, number>)
-  ).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
+      .reduce((acc: Record<string, number>, t) => { 
+        const current = acc[t.category] || 0;
+        acc[t.category] = current + Number(t.amount); 
+        return acc; 
+      }, {} as Record<string, number>)
+  )
+  .map(([name, value]) => ({ name, value: Number(value) })) // Ensure value is a Number
+  .sort((a, b) => Number(b.value) - Number(a.value)); // Explicit subtraction
 
   const barData = [
     { name: 'Income', amount: income, fill: '#22c55e' },
@@ -214,11 +228,9 @@ const Budget: React.FC<BudgetProps> = ({ transactions, setTransactions, currency
                 {/* Segmented Battery Bar */}
                 <div className="flex gap-1 h-6 mt-3 w-full max-w-md">
                    {Array.from({ length: 10 }).map((_, i) => {
-                      // Calculate if this segment is active
                       const segmentValue = (i + 1) * 10;
-                      // Battery level logic: If deficit, show full red. Else show savings %.
                       const level = isDeficit ? 100 : Math.min(100, Math.max(0, savingsRate));
-                      const isActive = isDeficit || (level >= segmentValue - 5); // Approximate fill
+                      const isActive = isDeficit || (level >= segmentValue - 5);
                       
                       return (
                         <div 
@@ -411,7 +423,7 @@ const Budget: React.FC<BudgetProps> = ({ transactions, setTransactions, currency
                            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs text-slate-600 dark:text-slate-400">{t.category}</span>
                         </td>
                         <td className={`p-4 text-right font-bold ${t.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                           {t.type === 'expense' ? '-' : '+'}{t.amount.toLocaleString()}
+                           {t.type === 'expense' ? '-' : '+'}{Number(t.amount).toLocaleString()}
                         </td>
                         <td className="p-4 text-center">
                            <div className="flex items-center justify-center gap-2">
