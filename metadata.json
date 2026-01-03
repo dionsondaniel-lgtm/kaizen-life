@@ -1,0 +1,9 @@
+{
+  "name": "Copy of Kaizen Life",
+  "description": "A continuous improvement dashboard for daily digital life, budgeting, and productivity.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
