@@ -156,7 +156,6 @@ const Budget: React.FC<BudgetProps> = ({ transactions, setTransactions, currency
 
   const chartWidth = Math.max(100, (chartData.length || 0) * 8); 
 
-  // --- FIX: Explicitly typed accumulator and explicit Number() casting ---
   const categoryData = Object.entries(
     transactions
       .filter(t => t.type === 'expense')
@@ -166,8 +165,8 @@ const Budget: React.FC<BudgetProps> = ({ transactions, setTransactions, currency
         return acc; 
       }, {} as Record<string, number>)
   )
-  .map(([name, value]) => ({ name, value: Number(value) })) // Ensure value is a Number
-  .sort((a, b) => Number(b.value) - Number(a.value)); // Explicit subtraction
+  .map(([name, value]) => ({ name, value: Number(value) }))
+  .sort((a, b) => Number(b.value) - Number(a.value));
 
   const barData = [
     { name: 'Income', amount: income, fill: '#22c55e' },
@@ -403,42 +402,46 @@ const Budget: React.FC<BudgetProps> = ({ transactions, setTransactions, currency
        )}
 
        {view === 'transactions' && (
-         <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <table className="w-full text-left text-sm">
-               <thead className="bg-slate-50 dark:bg-slate-800 border-b dark:border-slate-700">
-                  <tr>
-                     <th className="p-4">Date</th>
-                     <th className="p-4">Description</th>
-                     <th className="p-4">Category</th>
-                     <th className="p-4 text-right">Amount</th>
-                     <th className="p-4 text-center">Action</th>
-                  </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {transactions.map(t => (
-                     <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <td className="p-4 text-slate-500">{format(new Date(t.date), 'MMM dd')}</td>
-                        <td className="p-4 font-medium text-slate-900 dark:text-white">{t.title}</td>
-                        <td className="p-4">
-                           <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs text-slate-600 dark:text-slate-400">{t.category}</span>
-                        </td>
-                        <td className={`p-4 text-right font-bold ${t.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                           {t.type === 'expense' ? '-' : '+'}{Number(t.amount).toLocaleString()}
-                        </td>
-                        <td className="p-4 text-center">
-                           <div className="flex items-center justify-center gap-2">
-                             <button onClick={() => openEdit(t)} className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-full hover:bg-blue-100 transition">
-                                <Pencil size={16} />
-                             </button>
-                             <button onClick={() => promptDelete(t.id)} className="p-2 bg-red-50 dark:bg-red-900/30 text-red-600 rounded-full hover:bg-red-100 transition">
-                                <Trash2 size={16} />
-                             </button>
-                           </div>
-                        </td>
+         <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
+            
+            {/* --- UPDATED: Horizontal Scroll Wrapper for Table --- */}
+            <div className="overflow-x-auto custom-scrollbar w-full">
+               <table className="w-full text-left text-sm min-w-[600px]">
+                  <thead className="bg-slate-50 dark:bg-slate-800 border-b dark:border-slate-700">
+                     <tr>
+                        <th className="p-4 whitespace-nowrap">Date</th>
+                        <th className="p-4 whitespace-nowrap">Description</th>
+                        <th className="p-4 whitespace-nowrap">Category</th>
+                        <th className="p-4 text-right whitespace-nowrap">Amount</th>
+                        <th className="p-4 text-center whitespace-nowrap">Action</th>
                      </tr>
-                  ))}
-               </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                     {transactions.map(t => (
+                        <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                           <td className="p-4 text-slate-500 whitespace-nowrap">{format(new Date(t.date), 'MMM dd, yyyy')}</td>
+                           <td className="p-4 font-medium text-slate-900 dark:text-white min-w-[150px]">{t.title}</td>
+                           <td className="p-4">
+                              <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">{t.category}</span>
+                           </td>
+                           <td className={`p-4 text-right font-bold whitespace-nowrap ${t.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                              {t.type === 'expense' ? '-' : '+'}{Number(t.amount).toLocaleString()}
+                           </td>
+                           <td className="p-4 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-2">
+                                <button onClick={() => openEdit(t)} className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-full hover:bg-blue-100 transition">
+                                   <Pencil size={16} />
+                                </button>
+                                <button onClick={() => promptDelete(t.id)} className="p-2 bg-red-50 dark:bg-red-900/30 text-red-600 rounded-full hover:bg-red-100 transition">
+                                   <Trash2 size={16} />
+                                </button>
+                              </div>
+                           </td>
+                        </tr>
+                     ))}
+                  </tbody>
+               </table>
+            </div>
          </div>
        )}
 

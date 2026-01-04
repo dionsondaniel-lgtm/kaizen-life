@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, FileText, Search, Lock, Calendar, Clock, BarChart3, Users, MessageSquare, Download, Shield, User as UserIcon } from 'lucide-react';
+import { 
+  Settings, FileText, Search, Lock, Calendar, Clock, BarChart3, 
+  Users, MessageSquare, Download, Shield, User as UserIcon, RefreshCw 
+} from 'lucide-react';
 import { fetchBucketFiles, getFileContent } from '../services/supabase';
 import { downloadFile, generateAdminReportWord } from '../utils/exporter';
 
@@ -12,6 +15,7 @@ const Admin: React.FC<AdminProps> = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [feedbacks, setFeedbacks] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
   
   // Separate search terms for tables
   const [userSearchTerm, setUserSearchTerm] = useState('');
@@ -28,50 +32,62 @@ const Admin: React.FC<AdminProps> = () => {
   const loadData = async () => {
     setLoading(true);
     
-    // 1. Fetch Users
-    const { data: userFiles } = await fetchBucketFiles('kaizenusers');
-    if (userFiles) {
-      const userList = await Promise.all(userFiles.map(async (f) => {
-        const { data } = await getFileContent('kaizenusers', f.name);
-        const userData = data?.currentUser || {};
-        
-        return {
-          ...userData,
-          email: userData.email || f.name.replace('.json', '').replace(/_/g, '.').replace('.com', '@gmail.com'), 
-          fileCreated: f.created_at,
-          fileModified: f.updated_at,
-          password: userData.password || 'N/A'
-        };
-      }));
-      setUsers(userList.filter(u => u));
-    }
+    try {
+      // 1. Fetch Users
+      const { data: userFiles } = await fetchBucketFiles('kaizenusers');
+      if (userFiles) {
+        const userList = await Promise.all(userFiles.map(async (f) => {
+          const { data } = await getFileContent('kaizenusers', f.name);
+          const userData = data?.currentUser || {};
+          
+          return {
+            ...userData,
+            email: userData.email || f.name.replace('.json', '').replace(/_/g, '.').replace('.com', '@gmail.com'), 
+            fileCreated: f.created_at,
+            fileModified: f.updated_at,
+            password: userData.password || 'N/A'
+          };
+        }));
+        setUsers(userList.filter(u => u));
+      }
 
-    // 2. Fetch Feedback
-    const { data: feedbackFiles } = await fetchBucketFiles('kaizenfeedback');
-    if (feedbackFiles) {
-       const feedbackList = await Promise.all(feedbackFiles.slice(0, 50).map(async (f) => {
-         const { data } = await getFileContent('kaizenfeedback', f.name);
-         // Ensure we handle the specific JSON structure provided
-         return data ? {
-             ...data,
-             // Fallback if date is missing, use timestamp or current date
-             date: data.date || data.timestamp || new Date().toISOString()
-         } : null;
-       }));
-       
-       const validFeedbacks = feedbackList.filter(f => f);
-       setFeedbacks(validFeedbacks);
+      // 2. Fetch Feedback
+      const { data: feedbackFiles } = await fetchBucketFiles('kaizenfeedback');
+      let validFeedbacks: any[] = [];
+      
+      if (feedbackFiles) {
+         const feedbackList = await Promise.all(feedbackFiles.slice(0, 50).map(async (f) => {
+           const { data } = await getFileContent('kaizenfeedback', f.name);
+           // Ensure we handle the specific JSON structure provided
+           return data ? {
+               ...data,
+               // Fallback if date is missing, use timestamp or current date
+               date: data.date || data.timestamp || new Date().toISOString()
+           } : null;
+         }));
+         
+         validFeedbacks = feedbackList.filter(f => f);
+         setFeedbacks(validFeedbacks);
+      }
 
-       setStats({
+      // Update Stats
+      setStats({
          totalUsers: userFiles?.length || 0,
          totalFeedback: validFeedbacks.length,
          bugCount: validFeedbacks.filter(f => f.type === 'bug').length,
-         featureCount: validFeedbacks.filter(f => f.type !== 'bug').length // Count features/suggestions together for simple chart
-       });
+         featureCount: validFeedbacks.filter(f => f.type !== 'bug').length 
+      });
+
+      setLastSynced(new Date());
+
+    } catch (error) {
+      console.error("Admin Load Data Error:", error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
+  // Only load once on mount
   useEffect(() => {
     loadData();
   }, []);
@@ -136,9 +152,22 @@ const Admin: React.FC<AdminProps> = () => {
           </h1>
           <p className="mt-1 text-slate-500 dark:text-slate-400 text-sm">Manage users, feedback, and system reports.</p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg">
-          <Clock size={14} />
-          <span>Synced: {new Date().toLocaleTimeString()}</span>
+        
+        {/* Sync Status & Refresh Button */}
+        <div className="flex items-center gap-3">
+           <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
+             <Clock size={14} />
+             <span>Synced: {lastSynced ? lastSynced.toLocaleTimeString() : '...'}</span>
+           </div>
+           
+           <button 
+             onClick={loadData}
+             disabled={loading}
+             className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors border border-indigo-200 dark:border-indigo-800 disabled:opacity-50"
+             title="Refresh Data"
+           >
+             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+           </button>
         </div>
       </div>
 

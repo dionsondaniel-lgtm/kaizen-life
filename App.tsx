@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { 
   Settings, Palette, Globe, Image, MessageSquare, HardDrive, Heart, 
-  X, Maximize2, ScanLine, Download
+  X, Maximize2, ScanLine, Download, WifiOff
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -28,7 +28,8 @@ import AITools from './pages/AITools';
 
 /* --- SUB-COMPONENTS --- */
 
-const DonateModal: React.FC<{ isOpen: boolean; onClose: () => void; settings: any }> = ({ isOpen, onClose, settings }) => {
+// UPDATED: Accepts isOnline prop to show warning
+const DonateModal: React.FC<{ isOpen: boolean; onClose: () => void; settings: any; isOnline: boolean }> = ({ isOpen, onClose, settings, isOnline }) => {
   const [expandedQr, setExpandedQr] = useState<'gcash' | 'rcbc' | null>(null);
 
   // Close lightbox if Escape is pressed
@@ -53,13 +54,27 @@ const DonateModal: React.FC<{ isOpen: boolean; onClose: () => void; settings: an
     <>
       <Modal isOpen={isOpen} onClose={onClose} title="Support Development">
          <div className="space-y-6">
+            
+            {/* Offline Warning */}
+            {!isOnline && (
+               <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 p-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                  <div className="p-1.5 bg-red-100 dark:bg-red-800 rounded-full text-red-600 dark:text-red-200">
+                     <WifiOff size={16} />
+                  </div>
+                  <div>
+                     <p className="text-xs font-bold text-red-700 dark:text-red-300">Offline Mode</p>
+                     <p className="text-[10px] text-red-600 dark:text-red-400">Transaction apps may require an internet connection.</p>
+                  </div>
+               </div>
+            )}
+
             <div className="bg-gradient-to-br from-indigo-50 to-slate-50 dark:from-slate-800 dark:to-slate-900 p-5 rounded-2xl border border-indigo-100 dark:border-slate-700 shadow-sm">
               <p className="text-center text-slate-700 dark:text-slate-300 italic font-medium leading-relaxed">
                 "Optional developer support ✨ In-kind contributions are greatly appreciated 🤍"
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className={`grid grid-cols-2 gap-4 ${!isOnline ? 'opacity-90' : ''}`}>
                {/* GCash Card */}
                <button 
                   onClick={() => setExpandedQr('gcash')}
@@ -172,31 +187,50 @@ const DonateModal: React.FC<{ isOpen: boolean; onClose: () => void; settings: an
   );
 };
 
-const FeedbackModal: React.FC<{ isOpen: boolean; onClose: () => void; user: User }> = ({ isOpen, onClose, user }) => {
+const FeedbackModal: React.FC<{ isOpen: boolean; onClose: () => void; user: User; isOnline: boolean }> = ({ isOpen, onClose, user, isOnline }) => {
   const [message, setMessage] = useState('');
   const [type, setType] = useState<'suggestion' | 'bug' | 'other'>('suggestion');
   const [sending, setSending] = useState(false);
 
   const handleSubmit = async () => {
+    if (!isOnline) {
+      alert("Please connect to the internet to send feedback.");
+      return;
+    }
     if(!message.trim()) return;
     setSending(true);
-    const feedbackData = {
-      userId: user.id,
-      userName: user.firstName + ' ' + user.lastName,
-      message,
-      type,
-      date: new Date().toISOString()
-    };
-    await uploadFeedback(feedbackData, user.id);
-    setSending(false);
-    setMessage('');
-    onClose();
-    alert("Feedback sent! Thank you.");
+    try {
+      const feedbackData = {
+        userId: user.id,
+        userName: user.firstName + ' ' + user.lastName,
+        message,
+        type,
+        date: new Date().toISOString()
+      };
+      await uploadFeedback(feedbackData, user.id);
+      setMessage('');
+      onClose();
+      alert("Feedback sent! Thank you.");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to send feedback. Please try again.");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Send Feedback">
        <div className="space-y-4">
+          
+          {/* Offline Warning */}
+          {!isOnline && (
+            <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 p-3 rounded-xl flex items-center gap-3 text-sm text-red-600 dark:text-red-400">
+               <WifiOff size={18} />
+               <span>You must be online to submit feedback.</span>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium mb-1 text-slate-700 dark:text-slate-300">Type</label>
             <div className="flex gap-2">
@@ -218,8 +252,8 @@ const FeedbackModal: React.FC<{ isOpen: boolean; onClose: () => void; user: User
           </div>
           <button 
             onClick={handleSubmit} 
-            disabled={sending}
-            className="w-full py-3 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 disabled:opacity-50"
+            disabled={sending || !isOnline}
+            className="w-full py-3 bg-brand-600 text-white font-bold rounded-xl hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sending ? 'Sending...' : 'Submit Feedback'}
           </button>
@@ -503,12 +537,13 @@ const App: React.FC = () => {
         </Modal>
       )}
 
-      {/* Donation/Support Modal */}
+      {/* Donation/Support Modal - UPDATED with isOnline prop */}
       {state.currentUser && (
         <DonateModal 
           isOpen={showDonate} 
           onClose={() => setShowDonate(false)} 
           settings={state.adminSettings} 
+          isOnline={isOnline}
         />
       )}
 
@@ -518,6 +553,7 @@ const App: React.FC = () => {
           isOpen={showFeedback} 
           onClose={() => setShowFeedback(false)} 
           user={state.currentUser} 
+          isOnline={isOnline}
         />
       )}
 
