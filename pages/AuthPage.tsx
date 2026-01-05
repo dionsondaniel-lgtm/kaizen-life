@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { WifiOff, Lock, User as UserIcon, Mail, HelpCircle, Wifi, ArrowLeft } from 'lucide-react';
+import { WifiOff, Lock, User as UserIcon, Mail, HelpCircle, Wifi, ArrowLeft, ExternalLink } from 'lucide-react';
 import { User } from '../types';
 import { formatPascalCase } from '../services/storage';
 // Ensure checkUserExists is exported from your service
@@ -21,11 +21,21 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // --- NEW: In-App Browser State ---
+  const [isInAppBrowser, setIsInAppBrowser] = useState(false);
 
   useEffect(() => {
     const handleStatus = () => setIsOffline(!navigator.onLine);
     window.addEventListener('online', handleStatus);
     window.addEventListener('offline', handleStatus);
+
+    // --- NEW: Detect In-App Browser (Messenger, Instagram, FB, etc.) ---
+    const ua = navigator.userAgent || navigator.vendor || (window as any).opera;
+    // Regex targets Facebook (FBAN/FBAV), Instagram, Twitter, LinkedIn
+    const isInApp = /FBAN|FBAV|Instagram|Twitter|LinkedIn/i.test(ua);
+    setIsInAppBrowser(isInApp);
+
     return () => {
       window.removeEventListener('online', handleStatus);
       window.removeEventListener('offline', handleStatus);
@@ -40,7 +50,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // --- LOGIN LOGIC (Works Offline) ---
+    // --- LOGIN LOGIC (Works Offline & Inside In-App Browsers usually) ---
     if (isLogin) {
       // 1. ADMIN CHECK (Bypass Local Storage)
       if(formData.email === 'admin@kaizen.com') {
@@ -85,14 +95,21 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
       }
 
     } else {
-      // --- SIGN UP LOGIC (Requires Internet) ---
+      // --- SIGN UP LOGIC (Requires Internet & External Browser) ---
       
+      // 1. Check Offline
       if (isOffline) {
         alert("You must be online to create a new account.");
         return;
       }
 
-      // 1. Validate Password (4 digits)
+      // 2. --- NEW: Check In-App Browser ---
+      if (isInAppBrowser) {
+        alert("Restricted: You cannot create an account inside an in-app browser (like Messenger or Instagram) because your data may be lost.\n\nPlease tap the '...' menu and select 'Open in Chrome/Safari' or install the app to proceed.");
+        return;
+      }
+
+      // 3. Validate Password (4 digits)
       if (!/^\d{4}$/.test(formData.password)) {
         alert("Password must be a 4-digit number.");
         return;
@@ -103,7 +120,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
         const fileKey = formData.email.toLowerCase().replace(/[@.]/g, '_'); // Key for Supabase
         const localKey = getFormattedKey(formData.email); // Key for Local Storage
 
-        // 2. Check existence in Supabase
+        // 4. Check existence in Supabase
         const alreadyExists = await checkUserExists(fileKey);
         if (alreadyExists) {
           alert("This email is already registered in the cloud. Please sign in.");
@@ -113,7 +130,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           return;
         }
 
-        // 3. Prepare User Object
+        // 5. Prepare User Object
         const newUser: User = {
           id: Date.now().toString(),
           firstName: formatPascalCase(formData.firstName),
@@ -123,13 +140,13 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           preferences: { theme: 'light', colorTheme: 'blue', currency: 'PHP', language: 'en', background: 'default' }
         };
         
-        // 4. Construct JSON Content
+        // 6. Construct JSON Content
         const backupContent = { 
           currentUser: { ...newUser, password: formData.password }, 
           cards: [], links: [], transactions: [], reminders: [] 
         };
 
-        // 5. Upload to Supabase (One-time backup)
+        // 7. Upload to Supabase (One-time backup)
         const initialBlob = new Blob([JSON.stringify(backupContent)], { type: 'application/json' });
         const initialFile = new File([initialBlob], `${fileKey}.json`, { type: 'application/json' });
 
@@ -139,7 +156,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
            console.warn("Cloud backup failed during signup:", err);
         }
 
-        // 6. SAVE TO LOCAL STORAGE
+        // 8. SAVE TO LOCAL STORAGE
         localStorage.setItem(localKey, JSON.stringify({
           ...newUser,
           password: formData.password
@@ -199,7 +216,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 p-4 relative z-10">
       
-      {/* --- NEW: Back to Home Link --- */}
+      {/* Back to Home Link */}
       <Link 
         to="/" 
         className="absolute top-6 left-6 text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400 transition-colors flex items-center gap-2 font-medium z-20"
@@ -230,20 +247,35 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           </div>
         )}
 
+        {/* --- NEW: In-App Browser Warning UI --- */}
+        {!isLogin && isInAppBrowser && (
+          <div className="border border-red-200 bg-red-50 text-red-700 px-4 py-3 rounded-xl mb-4 text-sm">
+            <div className="flex items-start gap-2">
+              <ExternalLink size={18} className="shrink-0 mt-0.5" />
+              <p>
+                <strong>Restricted Browser:</strong> You are using an in-app browser (like Messenger). 
+                To sign up and save data reliably, please tap the <strong>...</strong> menu and choose <strong>Open in External Browser</strong>.
+              </p>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <div className="grid grid-cols-2 gap-4">
               <div className="relative">
                 <input 
                   required placeholder="First Name" 
-                  className="w-full p-3 rounded-lg border dark:bg-slate-900 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isInAppBrowser}
+                  className="w-full p-3 rounded-lg border dark:bg-slate-900 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})}
                 />
               </div>
               <div className="relative">
                 <input 
                   required placeholder="Last Name" 
-                  className="w-full p-3 rounded-lg border dark:bg-slate-900 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isInAppBrowser}
+                  className="w-full p-3 rounded-lg border dark:bg-slate-900 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                   value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})}
                 />
               </div>
@@ -253,7 +285,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           <div className="relative">
             <input 
               required type="email" placeholder="Email Address" 
-              className="w-full p-3 pl-10 rounded-lg border dark:bg-slate-900 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!isLogin && isInAppBrowser}
+              className="w-full p-3 pl-10 rounded-lg border dark:bg-slate-900 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
               value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})}
             />
             <Mail className="absolute left-3 top-3.5 text-slate-400" size={18} />
@@ -266,7 +299,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               placeholder={isLogin ? "Password" : "Create 4-digit PIN"}
               inputMode={!isLogin ? "numeric" : "text"}
               maxLength={!isLogin ? 4 : undefined}
-              className="w-full p-3 pl-10 pr-10 rounded-lg border dark:bg-slate-900 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!isLogin && isInAppBrowser}
+              className="w-full p-3 pl-10 pr-10 rounded-lg border dark:bg-slate-900 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
               value={formData.password} 
               onChange={e => setFormData({...formData, password: e.target.value})}
             />
@@ -286,7 +320,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
           </div>
 
           <button 
-            disabled={(!isLogin && isOffline) || isSubmitting}
+            disabled={(!isLogin && isOffline) || (!isLogin && isInAppBrowser) || isSubmitting}
             className="w-full bg-brand-600 text-white py-3 rounded-xl font-bold hover:bg-brand-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-brand-500/30"
           >
             {isSubmitting ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
@@ -357,10 +391,18 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
       <Modal isOpen={modalType === 'terms'} onClose={() => setModalType(null)} title="Terms of Service">
         <div className="space-y-4 text-slate-600 dark:text-slate-300 text-sm leading-relaxed">
-          <p><strong>Effective Date:</strong> {new Date().toLocaleDateString()}</p>
+          <p><strong>Effective Date:</strong> January 4, 2026</p>
           <div className="space-y-2">
             <h4 className="font-bold text-slate-900 dark:text-white">1. Local-First Architecture</h4>
-            <p>Kaizen Life operates on a "Local-First" basis. All your personal data is stored locally. Cloud backups are optional.</p>
+            <p>Kaizen Life operates on a "Local-First" basis. All your personal data (budget, links, habits) is stored on your device's local storage. You are solely responsible for your data.</p>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-bold text-slate-900 dark:text-white">2. AI Features</h4>
+            <p>This app uses Google Gemini AI. By using the AI Tools, you acknowledge that your prompts are sent to Google for processing. Do not share sensitive personal information (PII) in AI chats.</p>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-bold text-slate-900 dark:text-white">3. Donations & Usage</h4>
+            <p>This application is free to use. Donations via QR codes are completely voluntary and non-refundable gifts to support the developer. No features are paywalled.</p>
           </div>
         </div>
       </Modal>
@@ -369,7 +411,11 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
         <div className="space-y-4 text-slate-600 dark:text-slate-300 text-sm leading-relaxed">
           <div className="space-y-2">
             <h4 className="font-bold text-slate-900 dark:text-white">1. Data Storage</h4>
-            <p>We do not track your daily activities or financial data. Everything stays on your device.</p>
+            <p>We do not track your daily activities. Your financial records and habits live in your browser's <code>localStorage</code>. Clearing your browser cache will erase your data.</p>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-bold text-slate-900 dark:text-white">2. Third-Party Services</h4>
+            <p>We use Supabase solely for anonymous user counting and feedback form submissions. We use Google Gemini for AI responses. Please review Google's Privacy Policy regarding AI interactions.</p>
           </div>
         </div>
       </Modal>
